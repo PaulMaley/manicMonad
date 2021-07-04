@@ -1,8 +1,8 @@
-# Monads and stuff #
+# Monads and stuff 
 Try to see how the Haskell standard types like Monads
 can be used -- as they seem to be used by everybody !!
 
-## Simple expression language with environment ##
+## Simple expression language with environment 
 Language specification:
 
 ```
@@ -62,7 +62,7 @@ return x = Reader (\_ -> x)
 g >>= f = Reader (\e -> runR (f (runR g e)) e)
 ```
 
-## Experiments ##
+## Experiments 
 ```
 *Main> e0 = E []
 *Main> return = Main.return
@@ -93,7 +93,7 @@ add5tox :: Reader Env Val
 1
 ```
 
-## Stacking Monads ##
+## Stacking Monads 
 OK, things getting a bit wild ...  
 Added the code:
 ```
@@ -120,3 +120,133 @@ w1 :: (MonadReader r m, Num a) => WriterT [Char] m a
 *> (runReader . runWriterT) w1 []
 (1,"Val")
 ```
+
+## Round 2 
+Want to chain together a series of functions `Int -> Int`
+to get a final result.
+However, a function *might* require a variable from the
+environment.
+We'll use the Reader to pass the environment through
+the computation
+Introduce the possibility of failure - when a 
+variable is not found in the environment
+
+Here is the code ... and it works. 
+
+```
+newtype Env = E [(Var,Val)] deriving (Show)
+
+emptyEnv :: Env
+emptyEnv = E []
+
+applyEnv :: Env -> Var -> Maybe Val
+applyEnv (E []) _  = Nothing
+applyEnv (E ((varx,valx):xs)) var
+           | var == varx = Just valx
+           | otherwise = applyEnv (E xs) var 
+extendEnv x (E xs) = E (x:xs)
+
+valueOf :: String -> Env -> Maybe Int
+valueOf x env = applyEnv env x
+ 
+-- First implement what I want .. then see how to build it from 
+-- Monads and stuff ...
+
+-- Want this:
+(>>=) :: (Maybe Int,Env) -> (Int -> Env -> Maybe Int) -> (Maybe Int,Env)
+(>>=) (mx,env) f = case mx of
+                     Nothing -> (Nothing, env)
+                     Just x -> (f x env, env)
+
+```
+
+Testing in ghci:
+
+``` 
+Main> env = emptyEnv 
+Main> f x env = Just (x+1) 
+Main> g x env = Just (x*x+1) 
+Main> (Just 1, env) >>= f 
+Main> (>>=) = (Main.>>=)
+Main> (Just 1, env) >>= f 
+(Just 2,E [])
+Main> (Just 1, env) >>= f >>= f
+(Just 3,E [])
+Main> (Just 1, env) >>= f >>= f >>= g
+(Just 10,E [])
+Main> h x env = case (valueOf "y" env) of Nothing -> Nothing; (Just y) -> Just (x*y)  
+Main> (Just 1, env) >>= f >>= f >>= h
+(Nothing,E [])
+Main> (Just 1, (extendEnv ("y",1) emptyEnv)) >>= f >>= f >>= h
+(Just 3,E [("y",1)])
+Main> (Just 1, (extendEnv ("y",1) emptyEnv)) >>= f >>= f >>= h >>= f
+(Just 4,E [("y",1)])
+Main> (Just 1, (extendEnv ("y",1) emptyEnv)) >>= f >>= f >>= h >>= h
+(Just 3,E [("y",1)])
+Main> 
+```
+
+Now how to reimplement this with standard stuff ?
+
+## Using Monadic feature of Maybe
+This is in `readMaybe.hs`
+
+```
+-- Maybe is a Monad 
+-- return (emptyEnv,0) >>= f 
+-- gives 1 .... aha.
+f :: (Env,Int) -> Maybe (Env,Int)
+f (env, x) = Just (env, x+1)
+
+g :: (Env,Int) -> Maybe (Env,Int)
+g (env, x) = Just (env, x*x)
+
+-- And a lookup
+h :: (Env,Int) -> Maybe (Env,Int)
+h (env, x) = case valueOf "y" env of
+               Nothing -> Nothing
+               Just y -> Just (env, x*y)
+```
+It uses `>>=` as defined by `Maybe` and works nicely.
+(Heve `Env` can fail to find a value in the environment).
+
+```
+Main> (f (extendEnv ("y",4) emptyEnv ,0)) >>= g >>= h
+Just (E [("y",4)],4)
+Main> f (emptyEnv ,0)
+Just (E [],1)
+Main> (f (emptyEnv ,0)) >>= g
+Just (E [],1)
+Main> (f (emptyEnv ,0)) >>= g >>= h
+Nothing
+Main> (f (extendEnv ("y",4) emptyEnv ,0)) >>= g >>= h
+Just (E [("y",4)],4)
+*Main> 
+```
+
+
+
+
+## Playing with `Reader` in `ghci`
+
+Here there is no failure in lookup in the environment. Just trying
+to understand the types.
+```
+Main> f =  reader (\env -> (\x -> x+1)) :: Reader Env (Int -> Int)
+Main> g = reader (\env -> (\x -> x * (applyEnv  env "y"))) :: Reader Env (Int -> Int)
+Main> (runReader g (E [("y",4)]))   2
+8
+Main> (runReader f (E []))   0
+1
+```
+
+
+
+
+
+
+
+
+
+
+

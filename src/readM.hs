@@ -12,6 +12,8 @@ data Exp = ValEx Val
 -- Just crash if he variable is not in the environment  
 
 newtype Env = E [(Var,Val)] deriving (Show)
+emptyEnv :: Env
+emptyEnv = E []
 applyEnv :: Env -> Var -> Val
 applyEnv (E []) _  = error "Variable not in environment"
 applyEnv (E ((varx,valx):xs)) var
