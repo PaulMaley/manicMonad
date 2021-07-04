@@ -9,5 +9,8 @@ so I'm sticking it into a side project - this one.
 
 Why not try to start using `stack` at the same time ?????
 
+OK, `stack`is clearly overkill for this ... but got to start somewhere.
+
+## Back to basics
 
 
