@@ -199,7 +199,7 @@ f :: (Env,Int) -> Maybe (Env,Int)
 f (env, x) = Just (env, x+1)
 
 g :: (Env,Int) -> Maybe (Env,Int)
-g (env, x) = Just (env, x*x)
+g (env, x) = Just (env, x * x)
 
 -- And a lookup
 h :: (Env,Int) -> Maybe (Env,Int)
@@ -221,7 +221,7 @@ Main> (f (emptyEnv ,0)) >>= g >>= h
 Nothing
 Main> (f (extendEnv ("y",4) emptyEnv ,0)) >>= g >>= h
 Just (E [("y",4)],4)
-*Main> 
+Main> 
 ```
 
 
@@ -240,12 +240,68 @@ Main> (runReader f (E []))   0
 1
 ```
 
+## Change of tack
+Following some lectures from Uni Freiburg in Germany (Thiemann).
+Got down this far ....
 
+```
+evalM :: Monad m => Term -> m Integer
+evalM (Con n) = return n
+evalM (Bin t op u) = (evalM t) >>= \v -> 
+                     (evalM u) >>= \w -> 
+                     return (sys op v w)
+```
 
+So this is a parametrized function.
+The following 'work' straight out the bag:
 
+```
+Lib> evalM (Con 3)
+3
+Lib> evalM (Con 3) :: Maybe Integer
+Just 3
+Lib> evalM (Con 3) :: Either String Integer
+Right 3
 
+``` 
 
+Because bind and return are defined -- they are Monad instances.
+However, neither will catch divide by zero because it's not coded
+in the above function.
 
+Implemented `Monad Exception`
+
+```
+Lib> evalM (Bin (Con 3) Add (Bin (Con 10) Div (Con 2)))  :: Exception Integer
+Return 8
+```
+
+So, using `fail` gave a *generic* way to catch the divide by zero
+for the different Monads. But `fail` is no longer in the monad class.
+So now eval `(Bin t op u)` would need to be implemented on a monad
+by monad basis ..... ok.
+  
+What's more the next three implementations *all* reimplement the `eval`
+function. In other words there differences are not abstracted away by
+the Monad type. Question then: what is abstracted across the different 
+types?
+ 
+Implement Trace :
+```
+evalMT :: Term -> Trace Integer
+evalMT (Con n) = output (trace (Con n) n) >> return n
+evalMT (Bin t op u) = evalMT t >>= \v -> 
+                      evalMT u >>= \w ->
+                      let r = sys op v w 
+                      in output (trace (Bin t op u) r) >> return r
+``` 
+
+Works nicely:
+```
+Lib> evalMT (Bin (Con 3) Add (Bin (Con 10) Div (Con 2))) 
+Trace (8,"eval (Con 3)=3\neval (Con 10)=10\neval (Con 2)=2\neval (Bin (Con 10) Div (Con 2))=5\neval (Bin (Con 3) Add (Bin (Con 10) Div (Con 2)))=8\n")
+Lib>
+```
 
 
 
