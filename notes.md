@@ -303,6 +303,38 @@ Trace (8,"eval (Con 3)=3\neval (Con 10)=10\neval (Con 2)=2\neval (Bin (Con 10) D
 Lib>
 ```
 
+## Using the State Monad
+This is a f&%king rabbit hole again. 
+Short answer ... add `mtl` to the `packages.yaml` file and then use
+the Hackage documentation under mtl. A nightmare to get this far !!
+
+On the other hand it works nicely.
+
+```
+-- Redo Count using State ....
+-- define with ' so as to have both at the same time.
+-- This means rewriting evalMC with 's. This wouldn't be 
+-- necessary otherwise
+type Count' a = State Int a
+
+incr' :: Count' ()
+incr' = state (\i -> ((),i+1)) 
+
+evalMC' :: Term -> Count' Integer
+evalMC' (Con n) = return n
+evalMC' (Bin t op u) = evalMC' t >>= \v ->
+                       evalMC' u >>= \w ->
+                       incr' >>
+                       return (sys op v w) 
+```
+
+And in `ghci`
+```
+Lib> ex1 = (Bin (Bin (Con 2) Add (Con 0)) Add (Bin (Con 10) Div (Con 2)))
+Lib>  runState (evalMC' ex1) 0
+(7,3) 
+```
+
 
 
 

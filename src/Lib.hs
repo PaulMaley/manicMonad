@@ -10,6 +10,8 @@ Good to go over this again ... clearer this time
 module Lib where
 
 import Control.Monad
+import Control.Monad.State
+--import Control.Monad.ST.Lazy
 
 data Term = Con Integer
           | Bin Term Op Term
@@ -206,7 +208,7 @@ output s = Trace ((),s)
 -- And reimplement the evaluator
 -- Evaluation of (Con n) ... trace produces a string
 -- output sticks it into a Trace value and then >>
--- uses >>= to add the string to the Trace obect returned
+-- uses >>= to add the string to the Trace object returned
 -- by return whuch has an empty string !!!!!
 -- Trace (n, trace (Con n) n) is equivalent 
 
@@ -218,11 +220,57 @@ evalMT (Bin t op u) = evalMT t >>= \v ->
                       in output (trace (Bin t op u) r) >> return r
 
 
+-- Count Monad
+-- newtype Count a = Count {exCount :: Int ->(a,Int)}
 
+instance Functor Count where 
+--fmap :: (a->b) -> f a -> f b
+  fmap g (Count f) = Count (\i -> let (a, j) = f i
+                                  in (g a, j)) 
 
+-- Careful on the order of evaluation in <*> !!
+instance Applicative Count where
+  pure x = Count (\i -> (x,i)) 
+--(<*>) :: m (a->b) -> m a -> m b
+  (<*>) (Count g) (Count f) = Count (\i -> let (funcab, j) = g i
+                                               (a, k) = f j
+                                           in (funcab a, k))
 
+instance Monad Count where
+  return = pure
+--(>>=) :: m a -> (a -> m b) -> m b
+  (>>=) (Count x) f = Count (\i -> let (a, j) = x i
+                                   in  exCount (f a) j)
+ 
+incr :: Count ()
+incr = Count (\i -> ((),i+1))
 
+runCount :: Count a -> Int -> (a,Int)
+runCount (Count f) x = f x
 
+-- The interpreter
+evalMC :: Term -> Count Integer
+evalMC (Con n) = return n
+evalMC (Bin t op u) = evalMC t >>= \v ->
+                      evalMC u >>= \w ->
+                      incr >>
+                      return (sys op v w)                                   
+ 
+-- Redo Count using State ....
+-- define with ' so as to have both at the same time.
+-- This means rewriting evalMC with 's. This wouldn't be 
+-- necessary otherwise
+type Count' a = State Int a
+
+incr' :: Count' ()
+incr' = state (\i -> ((),i+1)) 
+
+evalMC' :: Term -> Count' Integer
+evalMC' (Con n) = return n
+evalMC' (Bin t op u) = evalMC' t >>= \v ->
+                       evalMC' u >>= \w ->
+                       incr' >>
+                       return (sys op v w)                                   
 
 
 
